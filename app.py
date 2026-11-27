@@ -1,9 +1,10 @@
 from flask import Flask
-import database as dbase
+from routes.categories import categories_bp
 
 app = Flask(__name__)
 
-db = dbase.dbConnection()
+# Registrar módulos de la aplicación
+app.register_blueprint(categories_bp)
 
 @app.route('/')
 def home():
