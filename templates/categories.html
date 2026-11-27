@@ -1,0 +1,306 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Categorías</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+
+    <div class="container mt-5">
+
+        <h1 class="text-center mb-2">
+            Sistema de Cafetería y Repostería
+        </h1>
+
+        <h3 class="text-center mb-4">
+            Gestión de Categorías
+        </h3>
+
+        <div id="message" class="alert d-none" role="alert"></div>
+
+        <div class="row">
+
+            <!-- Formulario de categorías -->
+            <div class="col-md-4 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 id="formTitle" class="mb-0">
+                            Registrar categoría
+                        </h5>
+                    </div>
+
+                    <div class="card-body">
+                        <form id="categoryForm">
+
+                            <label class="form-label">Nombre</label>
+                            <input
+                                type="text"
+                                id="name"
+                                class="form-control mb-3"
+                                maxlength="100"
+                                required
+                            >
+
+                            <label class="form-label">Descripción</label>
+                            <textarea
+                                id="description"
+                                class="form-control mb-3"
+                                rows="3"
+                            ></textarea>
+
+                            <button
+                                type="submit"
+                                id="saveBtn"
+                                class="btn btn-primary"
+                            >
+                                Guardar
+                            </button>
+
+                            <button
+                                type="button"
+                                id="cancelBtn"
+                                class="btn btn-secondary d-none"
+                            >
+                                Cancelar
+                            </button>
+
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Listado de categorías -->
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">Categorías registradas</h5>
+                    </div>
+
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-striped table-bordered">
+                                <thead>
+                                    <tr>
+                                        <th>Nombre</th>
+                                        <th>Descripción</th>
+                                        <th>Estado</th>
+                                        <th>Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="categoriesTable"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        const API = "/categories";
+
+        const form = document.getElementById("categoryForm");
+        const table = document.getElementById("categoriesTable");
+        const nameInput = document.getElementById("name");
+        const descriptionInput = document.getElementById("description");
+        const messageBox = document.getElementById("message");
+
+        let editingId = null;
+
+        function showMessage(text, success = true) {
+            messageBox.textContent = text;
+            messageBox.className = success
+                ? "alert alert-success"
+                : "alert alert-danger";
+        }
+
+        function resetForm() {
+            form.reset();
+            editingId = null;
+
+            document.getElementById("formTitle").textContent =
+                "Registrar categoría";
+
+            document.getElementById("saveBtn").textContent = "Guardar";
+
+            document.getElementById("cancelBtn")
+                .classList.add("d-none");
+        }
+
+        async function apiRequest(url, options = {}) {
+            const response = await fetch(url, options);
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(
+                    data.message || "Error en la solicitud"
+                );
+            }
+
+            return data;
+        }
+
+        function addCell(row, text) {
+            const cell = document.createElement("td");
+            cell.textContent = text;
+            row.appendChild(cell);
+            return cell;
+        }
+
+        // Consultar y mostrar categorías
+        async function loadCategories() {
+            try {
+                const categories = await apiRequest(API);
+
+                table.replaceChildren();
+
+                if (categories.length === 0) {
+                    const row = document.createElement("tr");
+                    const cell = addCell(
+                        row, "No hay categorías registradas"
+                    );
+                    cell.colSpan = 4;
+                    table.appendChild(row);
+                    return;
+                }
+
+                categories.forEach(category => {
+                    const row = document.createElement("tr");
+
+                    addCell(row, category.name);
+                    addCell(row, category.description || "");
+
+                    const statusCell = addCell(
+                        row,
+                        category.status ? "Activa" : "Inactiva"
+                    );
+
+                    statusCell.className = category.status
+                        ? "text-success"
+                        : "text-secondary";
+
+                    const actions = document.createElement("td");
+
+                    const editBtn = document.createElement("button");
+                    editBtn.textContent = "Editar";
+                    editBtn.className = "btn btn-primary btn-sm me-2";
+
+                    editBtn.addEventListener("click", () => {
+                        editingId = category._id;
+                        nameInput.value = category.name;
+                        descriptionInput.value =
+                            category.description || "";
+
+                        document.getElementById("formTitle").textContent =
+                            "Editar categoría";
+
+                        document.getElementById("saveBtn").textContent =
+                            "Actualizar";
+
+                        document.getElementById("cancelBtn")
+                            .classList.remove("d-none");
+
+                        nameInput.focus();
+                    });
+
+                    actions.appendChild(editBtn);
+
+                    if (category.status) {
+                        const deactivateBtn =
+                            document.createElement("button");
+
+                        deactivateBtn.textContent = "Desactivar";
+                        deactivateBtn.className =
+                            "btn btn-danger btn-sm";
+
+                        deactivateBtn.addEventListener("click", async () => {
+                            if (!confirm(
+                                "¿Deseas desactivar esta categoría?"
+                            )) {
+                                return;
+                            }
+
+                            try {
+                                await apiRequest(
+                                    `${API}/deactivate/${category._id}`,
+                                    { method: "PUT" }
+                                );
+
+                                showMessage(
+                                    "Categoría desactivada correctamente"
+                                );
+
+                                resetForm();
+                                await loadCategories();
+                            } catch (error) {
+                                showMessage(error.message, false);
+                            }
+                        });
+
+                        actions.appendChild(deactivateBtn);
+                    }
+
+                    row.appendChild(actions);
+                    table.appendChild(row);
+                });
+
+            } catch (error) {
+                showMessage(error.message, false);
+            }
+        }
+
+        // Registrar o actualizar categoría
+        form.addEventListener("submit", async (event) => {
+            event.preventDefault();
+
+            const data = {
+                name: nameInput.value.trim(),
+                description: descriptionInput.value.trim()
+            };
+
+            if (!data.name) {
+                showMessage(
+                    "El nombre de la categoría es obligatorio",
+                    false
+                );
+                return;
+            }
+
+            const url = editingId
+                ? `${API}/edit/${editingId}`
+                : API;
+
+            const method = editingId ? "PUT" : "POST";
+
+            try {
+                const result = await apiRequest(url, {
+                    method: method,
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                showMessage(result.message);
+                resetForm();
+                await loadCategories();
+
+            } catch (error) {
+                showMessage(error.message, false);
+            }
+        });
+
+        document.getElementById("cancelBtn")
+            .addEventListener("click", resetForm);
+
+        // Cargar datos al abrir la página
+        loadCategories();
+    </script>
+
+</body>
+</html>
