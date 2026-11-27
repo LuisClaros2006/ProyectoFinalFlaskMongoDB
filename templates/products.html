@@ -1,0 +1,443 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Productos</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+
+<body class="bg-light">
+
+<div class="container mt-5 mb-5">
+
+    <h1 class="text-center mb-2">
+        Sistema de Cafetería y Repostería
+    </h1>
+
+    <h3 class="text-center mb-4">
+        Gestión de Productos
+    </h3>
+
+    <div id="message" class="alert d-none" role="alert"></div>
+
+    <div class="row">
+
+        <!-- Formulario -->
+        <div class="col-lg-4 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 id="formTitle" class="mb-0">
+                        Registrar producto
+                    </h5>
+                </div>
+
+                <div class="card-body">
+                    <form id="productForm">
+
+                        <label class="form-label">Nombre</label>
+                        <input
+                            type="text"
+                            id="name"
+                            class="form-control mb-3"
+                            maxlength="100"
+                            required
+                        >
+
+                        <label class="form-label">Descripción</label>
+                        <textarea
+                            id="description"
+                            class="form-control mb-3"
+                            rows="3"
+                        ></textarea>
+
+                        <label class="form-label">Categoría</label>
+                        <select
+                            id="category"
+                            class="form-select mb-3"
+                            required
+                        >
+                            <option value="">Seleccione una categoría</option>
+                        </select>
+
+                        <label class="form-label">Precio (Bs)</label>
+                        <input
+                            type="number"
+                            id="price"
+                            class="form-control mb-3"
+                            min="0"
+                            step="0.01"
+                            required
+                        >
+
+                        <label class="form-label">Stock</label>
+                        <input
+                            type="number"
+                            id="stock"
+                            class="form-control mb-3"
+                            min="0"
+                            step="1"
+                            required
+                        >
+
+                        <button
+                            type="submit"
+                            id="saveBtn"
+                            class="btn btn-primary"
+                        >
+                            Guardar
+                        </button>
+
+                        <button
+                            type="button"
+                            id="cancelBtn"
+                            class="btn btn-secondary d-none"
+                        >
+                            Cancelar
+                        </button>
+
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Listado -->
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Productos registrados</h5>
+                </div>
+
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped table-bordered align-middle">
+                            <thead>
+                                <tr>
+                                    <th>Nombre</th>
+                                    <th>Categoría</th>
+                                    <th>Precio</th>
+                                    <th>Stock</th>
+                                    <th>Estado</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+
+                            <tbody id="productsTable"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<script>
+    const API = "/products";
+    const CATEGORIES_API = "/categories";
+
+    const form = document.getElementById("productForm");
+    const table = document.getElementById("productsTable");
+
+    const nameInput = document.getElementById("name");
+    const descriptionInput = document.getElementById("description");
+    const categoryInput = document.getElementById("category");
+    const priceInput = document.getElementById("price");
+    const stockInput = document.getElementById("stock");
+
+    const messageBox = document.getElementById("message");
+    const cancelBtn = document.getElementById("cancelBtn");
+    const saveBtn = document.getElementById("saveBtn");
+
+    let editingId = null;
+    let activeCategories = [];
+
+    function showMessage(text, success = true) {
+        messageBox.textContent = text;
+        messageBox.className = success
+            ? "alert alert-success"
+            : "alert alert-danger";
+    }
+
+    function resetForm() {
+        form.reset();
+        editingId = null;
+
+        document.getElementById("formTitle").textContent =
+            "Registrar producto";
+
+        saveBtn.textContent = "Guardar";
+        cancelBtn.classList.add("d-none");
+    }
+
+    async function apiRequest(url, options = {}) {
+        const response = await fetch(url, options);
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(
+                data.message || "Error en la solicitud"
+            );
+        }
+
+        return data;
+    }
+
+    function addCell(row, text) {
+        const cell = document.createElement("td");
+        cell.textContent = text;
+        row.appendChild(cell);
+        return cell;
+    }
+
+    // Cargar únicamente categorías activas
+    async function loadCategories() {
+        const categories = await apiRequest(CATEGORIES_API);
+
+        activeCategories = categories.filter(
+            category => category.status === true
+        );
+
+        categoryInput.replaceChildren();
+
+        const defaultOption = document.createElement("option");
+        defaultOption.value = "";
+        defaultOption.textContent = "Seleccione una categoría";
+        categoryInput.appendChild(defaultOption);
+
+        activeCategories.forEach(category => {
+            const option = document.createElement("option");
+            option.value = category._id;
+            option.textContent = category.name;
+            categoryInput.appendChild(option);
+        });
+    }
+
+    // Mostrar productos
+    async function loadProducts() {
+        try {
+            const products = await apiRequest(API);
+
+            table.replaceChildren();
+
+            if (products.length === 0) {
+                const row = document.createElement("tr");
+                const cell = addCell(
+                    row, "No hay productos registrados"
+                );
+                cell.colSpan = 6;
+                table.appendChild(row);
+                return;
+            }
+
+            products.forEach(product => {
+                const row = document.createElement("tr");
+
+                addCell(row, product.name);
+                addCell(
+                    row,
+                    product.category_name || "Sin categoría"
+                );
+                addCell(row, "Bs " + product.price);
+                addCell(row, String(product.stock));
+
+                const statusCell = addCell(
+                    row,
+                    product.status ? "Activo" : "Inactivo"
+                );
+
+                statusCell.className = product.status
+                    ? "text-success"
+                    : "text-secondary";
+
+                const actions = document.createElement("td");
+
+                // Botón Editar
+                const editBtn = document.createElement("button");
+                editBtn.textContent = "Editar";
+                editBtn.className =
+                    "btn btn-primary btn-sm me-2 mb-1";
+
+                editBtn.addEventListener("click", () => {
+                    // La edición requiere categoría activa
+                    const categoryIsActive = activeCategories.some(
+                        category => category._id === product.category_id
+                    );
+
+                    if (!categoryIsActive) {
+                        showMessage(
+                            "La categoría de este producto está inactiva. " +
+                            "No se puede editar hasta seleccionar una " +
+                            "categoría activa.",
+                            false
+                        );
+                        return;
+                    }
+
+                    editingId = product._id;
+
+                    nameInput.value = product.name;
+                    descriptionInput.value =
+                        product.description || "";
+
+                    categoryInput.value = product.category_id;
+                    priceInput.value = product.price;
+                    stockInput.value = product.stock;
+
+                    document.getElementById("formTitle").textContent =
+                        "Editar producto";
+
+                    saveBtn.textContent = "Actualizar";
+                    cancelBtn.classList.remove("d-none");
+
+                    form.scrollIntoView({
+                        behavior: "smooth",
+                        block: "start"
+                    });
+                });
+
+                actions.appendChild(editBtn);
+
+                // Botón Desactivar
+                if (product.status) {
+                    const deactivateBtn =
+                        document.createElement("button");
+
+                    deactivateBtn.textContent = "Desactivar";
+                    deactivateBtn.className =
+                        "btn btn-danger btn-sm mb-1";
+
+                    deactivateBtn.addEventListener(
+                        "click",
+                        async () => {
+                            if (!confirm(
+                                "¿Deseas desactivar este producto?"
+                            )) {
+                                return;
+                            }
+
+                            try {
+                                await apiRequest(
+                                    `${API}/deactivate/${product._id}`,
+                                    { method: "PUT" }
+                                );
+
+                                showMessage(
+                                    "Producto desactivado correctamente"
+                                );
+
+                                resetForm();
+                                await loadProducts();
+
+                            } catch (error) {
+                                showMessage(error.message, false);
+                            }
+                        }
+                    );
+
+                    actions.appendChild(deactivateBtn);
+                }
+
+                row.appendChild(actions);
+                table.appendChild(row);
+            });
+
+        } catch (error) {
+            showMessage(error.message, false);
+        }
+    }
+
+    // Registrar o actualizar producto
+    form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+
+        const stock = Number(stockInput.value);
+        const price = Number(priceInput.value);
+
+        if (!nameInput.value.trim()) {
+            showMessage("El nombre es obligatorio", false);
+            return;
+        }
+
+        if (!categoryInput.value) {
+            showMessage("Seleccione una categoría", false);
+            return;
+        }
+
+        if (!Number.isFinite(price) || price < 0) {
+            showMessage("El precio no es válido", false);
+            return;
+        }
+
+        if (!Number.isInteger(stock) || stock < 0) {
+            showMessage(
+                "El stock debe ser un entero no negativo",
+                false
+            );
+            return;
+        }
+
+        const data = {
+            name: nameInput.value.trim(),
+            description: descriptionInput.value.trim(),
+            category_id: categoryInput.value,
+            price: priceInput.value,
+            stock: stock
+        };
+
+        const url = editingId
+            ? `${API}/edit/${editingId}`
+            : API;
+
+        const method = editingId ? "PUT" : "POST";
+
+        try {
+            saveBtn.disabled = true;
+
+            const result = await apiRequest(url, {
+                method: method,
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(data)
+            });
+
+            showMessage(result.message);
+            resetForm();
+            await loadProducts();
+
+        } catch (error) {
+            showMessage(error.message, false);
+        } finally {
+            saveBtn.disabled = false;
+        }
+    });
+
+    cancelBtn.addEventListener("click", resetForm);
+
+    // Inicializar la interfaz
+    async function initialize() {
+        try {
+            await loadCategories();
+            await loadProducts();
+
+            if (activeCategories.length === 0) {
+                showMessage(
+                    "No hay categorías activas. Registra una categoría " +
+                    "antes de crear productos.",
+                    false
+                );
+            }
+
+        } catch (error) {
+            showMessage(error.message, false);
+        }
+    }
+
+    initialize();
+</script>
+
+</body>
+</html>
